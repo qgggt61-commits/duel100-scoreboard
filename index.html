@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>100分单挑积分榜</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --text: #1a1d24;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #e8590c;
+    --accent-soft: #fff0e6;
+    --gold: #f59f00;
+    --silver: #868e96;
+    --bronze: #b08050;
+    --win: #2f9e44;
+    --lose: #e03131;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12141a;
+      --card: #1c1f27;
+      --text: #e8eaef;
+      --muted: #9aa1ad;
+      --border: #2c313c;
+      --accent: #ff8f4d;
+      --accent-soft: #33241a;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px 16px 60px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 28px; }
+  header h1 {
+    font-size: 28px;
+    letter-spacing: 2px;
+  }
+  header h1 .ball { margin-right: 8px; }
+  header p { color: var(--muted); margin-top: 6px; font-size: 14px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+  }
+  .card h2 {
+    font-size: 16px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h2::before {
+    content: "";
+    width: 4px; height: 16px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  /* 球员名字编辑 */
+  .players-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .players-row input {
+    flex: 1;
+    min-width: 120px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    text-align: center;
+  }
+  .players-row input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+  /* 录入比赛 */
+  .match-form {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 10px;
+    align-items: center;
+  }
+  .side { display: flex; flex-direction: column; gap: 8px; }
+  .side select, .side input {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    text-align: center;
+    width: 100%;
+  }
+  .side input { font-size: 22px; font-weight: 700; }
+  .vs {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--accent);
+    padding: 0 4px;
+  }
+  .btn {
+    display: block;
+    width: 100%;
+    margin-top: 14px;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    cursor: pointer;
+    transition: filter .15s;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; text-align: center; }
+  .error { color: var(--lose); font-size: 13px; margin-top: 8px; text-align: center; display: none; }
+
+  /* 积分榜 */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 10px 8px; text-align: center; white-space: nowrap; }
+  thead th {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr.top1 { background: var(--accent-soft); }
+  .rank-badge {
+    display: inline-flex;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    color: #fff;
+    font-size: 13px;
+  }
+  .r1 { background: var(--gold); }
+  .r2 { background: var(--silver); }
+  .r3 { background: var(--bronze); }
+  .pname { font-weight: 700; font-size: 15px; }
+  .diff-pos { color: var(--win); font-weight: 700; }
+  .diff-neg { color: var(--lose); font-weight: 700; }
+  .table-scroll { overflow-x: auto; }
+
+  /* 历史记录 */
+  .history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 4px;
+    border-bottom: 1px dashed var(--border);
+    font-size: 14px;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .h-date { color: var(--muted); font-size: 12px; min-width: 92px; }
+  .h-score { flex: 1; text-align: center; }
+  .h-score .winner { color: var(--win); font-weight: 700; }
+  .h-score .num { font-weight: 800; font-size: 15px; margin: 0 4px; }
+  .del-btn {
+    border: none;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+  .del-btn:hover { color: var(--lose); background: var(--bg); }
+  .empty { color: var(--muted); text-align: center; padding: 20px 0; font-size: 14px; }
+
+  .footer-actions { text-align: center; margin-top: 8px; }
+  .clear-btn {
+    border: 1px solid var(--border);
+    background: none;
+    color: var(--muted);
+    padding: 8px 18px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .clear-btn:hover { color: var(--lose); border-color: var(--lose); }
+
+  @media (max-width: 520px) {
+    .match-form { grid-template-columns: 1fr auto 1fr; gap: 6px; }
+    th, td { padding: 8px 4px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="ball">🏀</span>100分单挑积分榜</h1>
+    <p>三人单挑 · 先到 100 分者胜 · 数据自动保存在本机浏览器</p>
+  </header>
+
+  <!-- 球员名字 -->
+  <div class="card">
+    <h2>球员名单</h2>
+    <div class="players-row" id="playersRow">
+      <input type="text" data-idx="0" maxlength="10">
+      <input type="text" data-idx="1" maxlength="10">
+      <input type="text" data-idx="2" maxlength="10">
+    </div>
+    <p class="hint">直接修改名字即可，历史记录会同步更新</p>
+  </div>
+
+  <!-- 录入比赛 -->
+  <div class="card">
+    <h2>录入比赛</h2>
+    <div class="match-form">
+      <div class="side">
+        <select id="selA"></select>
+        <input type="number" id="scoreA" min="0" max="100" placeholder="得分">
+      </div>
+      <div class="vs">VS</div>
+      <div class="side">
+        <select id="selB"></select>
+        <input type="number" id="scoreB" min="0" max="100" placeholder="得分">
+      </div>
+    </div>
+    <p class="error" id="errMsg"></p>
+    <button class="btn" id="addBtn">记 一 场</button>
+  </div>
+
+  <!-- 积分榜 -->
+  <div class="card">
+    <h2>积分榜</h2>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>排名</th><th>球员</th><th>场次</th><th>胜</th><th>负</th>
+            <th>胜率</th><th>总得分</th><th>总失分</th><th>净胜分</th>
+          </tr>
+        </thead>
+        <tbody id="standingsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 历史记录 -->
+  <div class="card">
+    <h2>比赛记录</h2>
+    <div id="historyList"></div>
+    <div class="footer-actions">
+      <button class="clear-btn" id="clearBtn">清空全部记录</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const STORE_KEY = "duel100_data_v1";
+
+  let data = load();
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (Array.isArray(d.players) && d.players.length === 3 && Array.isArray(d.matches)) return d;
+      }
+    } catch (e) {}
+    return { players: ["球员一", "球员二", "球员三"], matches: [] };
+    // match: { a: 球员下标, b: 球员下标, sa: 分数, sb: 分数, t: 时间戳 }
+  }
+
+  function save() {
+    localStorage.setItem(STORE_KEY, JSON.stringify(data));
+  }
+
+  // ---------- 球员名字 ----------
+  const nameInputs = document.querySelectorAll("#playersRow input");
+  nameInputs.forEach(inp => {
+    inp.value = data.players[+inp.dataset.idx];
+    inp.addEventListener("change", () => {
+      const v = inp.value.trim();
+      if (!v) { inp.value = data.players[+inp.dataset.idx]; return; }
+      data.players[+inp.dataset.idx] = v;
+      save();
+      renderAll();
+    });
+  });
+
+  // ---------- 选手下拉框 ----------
+  const selA = document.getElementById("selA");
+  const selB = document.getElementById("selB");
+
+  function fillSelects() {
+    const pa = selA.value, pb = selB.value;
+    [selA, selB].forEach(sel => {
+      sel.innerHTML = data.players
+        .map((p, i) => `<option value="${i}">${esc(p)}</option>`)
+        .join("");
+    });
+    selA.value = pa !== "" && pa !== null ? pa : "0";
+    selB.value = pb !== "" && pb !== null ? pb : "1";
+    if (selA.value === selB.value) selB.value = (+selA.value + 1) % 3;
+  }
+
+  selA.addEventListener("change", () => {
+    if (selA.value === selB.value) selB.value = (+selA.value + 1) % 3;
+  });
+  selB.addEventListener("change", () => {
+    if (selB.value === selA.value) selA.value = (+selB.value + 1) % 3;
+  });
+
+  // ---------- 录入 ----------
+  const scoreA = document.getElementById("scoreA");
+  const scoreB = document.getElementById("scoreB");
+  const errMsg = document.getElementById("errMsg");
+
+  document.getElementById("addBtn").addEventListener("click", () => {
+    errMsg.style.display = "none";
+    const a = +selA.value, b = +selB.value;
+    const sa = parseInt(scoreA.value, 10);
+    const sb = parseInt(scoreB.value, 10);
+
+    let err = "";
+    if (a === b) err = "两名球员不能相同";
+    else if (isNaN(sa) || isNaN(sb)) err = "请填写双方得分";
+    else if (sa < 0 || sb < 0 || sa > 100 || sb > 100) err = "得分范围为 0 ~ 100";
+    else if (sa !== 100 && sb !== 100) err = "必须有一方达到 100 分才算结束";
+    else if (sa === 100 && sb === 100) err = "不能双方都是 100 分";
+
+    if (err) {
+      errMsg.textContent = err;
+      errMsg.style.display = "block";
+      return;
+    }
+
+    data.matches.unshift({ a, b, sa, sb, t: Date.now() });
+    save();
+    scoreA.value = "";
+    scoreB.value = "";
+    renderAll();
+  });
+
+  // ---------- 积分榜 ----------
+  function calcStats() {
+    const stats = data.players.map((p, i) => ({
+      idx: i, name: p, games: 0, win: 0, lose: 0, pf: 0, pa: 0
+    }));
+    for (const m of data.matches) {
+      const A = stats[m.a], B = stats[m.b];
+      if (!A || !B) continue;
+      A.games++; B.games++;
+      A.pf += m.sa; A.pa += m.sb;
+      B.pf += m.sb; B.pa += m.sa;
+      if (m.sa > m.sb) { A.win++; B.lose++; } else { B.win++; A.lose++; }
+    }
+    stats.sort((x, y) =>
+      y.win - x.win ||
+      (y.pf - y.pa) - (x.pf - x.pa) ||
+      y.pf - x.pf
+    );
+    return stats;
+  }
+
+  function renderStandings() {
+    const tbody = document.getElementById("standingsBody");
+    const stats = calcStats();
+    tbody.innerHTML = stats.map((s, rank) => {
+      const diff = s.pf - s.pa;
+      const rate = s.games ? Math.round(s.win / s.games * 100) + "%" : "—";
+      return `<tr class="${rank === 0 && s.games > 0 ? "top1" : ""}">
+        <td><span class="rank-badge r${rank + 1}">${rank + 1}</span></td>
+        <td class="pname">${esc(s.name)}</td>
+        <td>${s.games}</td>
+        <td>${s.win}</td>
+        <td>${s.lose}</td>
+        <td>${rate}</td>
+        <td>${s.pf}</td>
+        <td>${s.pa}</td>
+        <td class="${diff > 0 ? "diff-pos" : diff < 0 ? "diff-neg" : ""}">${diff > 0 ? "+" + diff : diff}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  // ---------- 历史记录 ----------
+  function renderHistory() {
+    const box = document.getElementById("historyList");
+    if (!data.matches.length) {
+      box.innerHTML = `<p class="empty">还没有比赛记录，快去单挑吧 💪</p>`;
+      return;
+    }
+    box.innerHTML = data.matches.map((m, i) => {
+      const d = new Date(m.t);
+      const ds = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      const aWin = m.sa > m.sb;
+      return `<div class="history-item">
+        <span class="h-date">${ds}</span>
+        <span class="h-score">
+          <span class="${aWin ? "winner" : ""}">${esc(data.players[m.a])}</span>
+          <span class="num">${m.sa}</span> : <span class="num">${m.sb}</span>
+          <span class="${aWin ? "" : "winner"}">${esc(data.players[m.b])}</span>
+        </span>
+        <button class="del-btn" data-i="${i}" title="删除这场">✕</button>
+      </div>`;
+    }).join("");
+
+    box.querySelectorAll(".del-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        data.matches.splice(+btn.dataset.i, 1);
+        save();
+        renderAll();
+      });
+    });
+  }
+
+  document.getElementById("clearBtn").addEventListener("click", () => {
+    if (!data.matches.length) return;
+    if (confirm("确定要清空全部比赛记录吗？此操作无法恢复。")) {
+      data.matches = [];
+      save();
+      renderAll();
+    }
+  });
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  function renderAll() {
+    fillSelects();
+    renderStandings();
+    renderHistory();
+  }
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
