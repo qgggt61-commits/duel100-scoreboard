@@ -39,13 +39,28 @@
     padding: 24px 16px 60px;
   }
   .wrap { max-width: 860px; margin: 0 auto; }
-  header { text-align: center; margin-bottom: 28px; }
+  header { text-align: center; margin-bottom: 20px; }
   header h1 {
     font-size: 28px;
     letter-spacing: 2px;
   }
   header h1 .ball { margin-right: 8px; }
   header p { color: var(--muted); margin-top: 6px; font-size: 14px; }
+  .sync-line {
+    margin-top: 10px;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card);
+  }
+  .sync-line.ok { color: var(--win); }
+  .sync-line.err { color: var(--lose); }
+  .sync-line.busy { color: var(--accent); }
+  .sync-line.local { color: var(--muted); }
   .card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -124,6 +139,7 @@
     transition: filter .15s;
   }
   .btn:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: .6; cursor: wait; }
   .hint { color: var(--muted); font-size: 12px; margin-top: 8px; text-align: center; }
   .error { color: var(--lose); font-size: 13px; margin-top: 8px; text-align: center; display: none; }
 
@@ -196,6 +212,44 @@
   }
   .clear-btn:hover { color: var(--lose); border-color: var(--lose); }
 
+  /* 云同步设置 */
+  .token-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .token-row input {
+    flex: 1;
+    min-width: 200px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  .token-row button {
+    padding: 10px 18px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .token-row button.secondary {
+    background: none;
+    color: var(--muted);
+  }
+  .howto { margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .howto summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+  .howto ol { margin: 10px 0 0 20px; line-height: 1.9; }
+  .howto code {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 12px;
+  }
+  .howto .warn { color: var(--lose); margin-top: 8px; }
+
   @media (max-width: 520px) {
     .match-form { grid-template-columns: 1fr auto 1fr; gap: 6px; }
     th, td { padding: 8px 4px; font-size: 13px; }
@@ -206,7 +260,8 @@
 <div class="wrap">
   <header>
     <h1><span class="ball">🏀</span>100分单挑积分榜</h1>
-    <p>三人单挑 · 先到 100 分者胜 · 数据自动保存在本机浏览器</p>
+    <p>三人单挑 · 先到 100 分者胜 · 记录保存在云端，所有设备同步</p>
+    <span class="sync-line" id="syncStatus">☁ 正在连接云端…</span>
   </header>
 
   <!-- 球员名字 -->
@@ -262,15 +317,49 @@
       <button class="clear-btn" id="clearBtn">清空全部记录</button>
     </div>
   </div>
+
+  <!-- 云同步设置 -->
+  <div class="card">
+    <h2>云同步设置</h2>
+    <p class="hint" style="text-align:left; margin: 0 0 10px;">
+      任何人打开本页都能<b>看到</b>最新记录；要<b>记分</b>，需要在本设备粘贴一次访问令牌（管理员生成后发给球友共用）。
+    </p>
+    <div class="token-row">
+      <input type="password" id="tokenInput" placeholder="粘贴访问令牌 (github_pat_ 开头)" autocomplete="off">
+      <button id="tokenSaveBtn">保存</button>
+      <button id="tokenClearBtn" class="secondary">清除</button>
+    </div>
+    <details class="howto">
+      <summary>管理员如何生成令牌？（只需操作一次）</summary>
+      <ol>
+        <li>登录 GitHub，点右上角头像 → <b>Settings</b></li>
+        <li>左栏最底部 <b>Developer settings</b> → <b>Personal access tokens</b> → <b>Fine-grained tokens</b> → <b>Generate new token</b></li>
+        <li>Token name 随便填（如 <code>duel100</code>）；Expiration 选最长的 <b>1 年</b></li>
+        <li>Repository access 选 <b>Only select repositories</b>，勾选 <code>duel100-scoreboard</code></li>
+        <li>Permissions → Repository permissions → <b>Contents</b> 改为 <b>Read and write</b></li>
+        <li>点 <b>Generate token</b>，复制 <code>github_pat_</code> 开头的一长串，粘贴到上面输入框点保存</li>
+        <li>把这串令牌发给另外两位球友，各自在自己手机上粘贴一次即可</li>
+      </ol>
+      <p class="warn">⚠ 令牌只发给信任的球友——拿到它的人可以修改这个仓库。令牌到期后重新生成一个换上即可。</p>
+    </details>
+  </div>
 </div>
 
 <script>
 (function () {
   const STORE_KEY = "duel100_data_v1";
+  const TOKEN_KEY = "duel100_gh_token_v1";
+  const GH_OWNER = "qgggt61-commits";
+  const GH_REPO = "duel100-scoreboard";
+  const GH_BRANCH = "master";
+  const API_URL = "https://api.github.com/repos/" + GH_OWNER + "/" + GH_REPO + "/contents/data.json";
 
-  let data = load();
+  let token = localStorage.getItem(TOKEN_KEY) || "";
+  let data = normalize(loadLocal());
+  let busy = false;
 
-  function load() {
+  // ---------- 本地缓存 ----------
+  function loadLocal() {
     try {
       const raw = localStorage.getItem(STORE_KEY);
       if (raw) {
@@ -279,23 +368,176 @@
       }
     } catch (e) {}
     return { players: ["球员一", "球员二", "球员三"], matches: [] };
-    // match: { a: 球员下标, b: 球员下标, sa: 分数, sb: 分数, t: 时间戳 }
+    // match: { id, a: 球员下标, b: 球员下标, sa: 分数, sb: 分数, t: 时间戳 }
   }
 
-  function save() {
+  function saveLocal() {
     localStorage.setItem(STORE_KEY, JSON.stringify(data));
   }
+
+  function normalize(d) {
+    if (!d || !Array.isArray(d.players) || d.players.length !== 3 || !Array.isArray(d.matches)) {
+      return { players: ["球员一", "球员二", "球员三"], matches: [] };
+    }
+    d.players = d.players.map(p => String(p).slice(0, 10) || "球员");
+    d.matches = d.matches.filter(m => m && typeof m.sa === "number" && typeof m.sb === "number");
+    for (const m of d.matches) {
+      if (!m.id) m.id = (m.t || 0) + "_" + Math.random().toString(36).slice(2, 8);
+    }
+    return d;
+  }
+
+  function clone(d) { return JSON.parse(JSON.stringify(d)); }
+
+  // ---------- GitHub 云端读写 ----------
+  function b64encode(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = "";
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return btoa(bin);
+  }
+  function b64decode(b64) {
+    const bin = atob(b64.replace(/\s/g, ""));
+    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  }
+
+  async function ghGet() {
+    const headers = { Accept: "application/vnd.github+json" };
+    if (token) headers.Authorization = "Bearer " + token;
+    const res = await fetch(API_URL + "?ref=" + GH_BRANCH + "&ts=" + Date.now(), { headers, cache: "no-store" });
+    if (res.status === 404) return { json: null, sha: null };
+    if (!res.ok) throw new Error("读取云端失败 (HTTP " + res.status + ")");
+    const body = await res.json();
+    let json = null;
+    try { json = JSON.parse(b64decode(body.content)); } catch (e) {}
+    return { json, sha: body.sha };
+  }
+
+  async function ghPut(obj, sha) {
+    const payload = {
+      message: "更新比赛记录",
+      content: b64encode(JSON.stringify(obj, null, 2)),
+      branch: GH_BRANCH
+    };
+    if (sha) payload.sha = sha;
+    return fetch(API_URL, {
+      method: "PUT",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  // 每次改动：拉取最新云端数据 → 在其上应用改动 → 写回；冲突自动重试
+  async function withSync(mutator) {
+    if (!token) {
+      mutator(data);
+      saveLocal();
+      renderAll();
+      setStatus("local", "⚠ 未设置令牌，本次改动只保存在本机，不会同步");
+      return;
+    }
+    if (busy) return;
+    busy = true;
+    setBtnBusy(true);
+    setStatus("busy", "☁ 同步中…");
+    try {
+      let lastErr = "";
+      for (let i = 0; i < 3; i++) {
+        const remote = await ghGet();
+        const base = remote.json ? normalize(remote.json) : clone(data);
+        mutator(base);
+        const res = await ghPut(base, remote.sha);
+        if (res.ok) {
+          data = base;
+          saveLocal();
+          renderAll();
+          setStatus("ok", "☁ 已同步 " + timeStr());
+          return;
+        }
+        if (res.status === 409 || res.status === 422) { lastErr = "编辑冲突"; continue; }
+        if (res.status === 401 || res.status === 403) throw new Error("令牌无效或已过期，请重新设置");
+        throw new Error("HTTP " + res.status);
+      }
+      throw new Error(lastErr || "多次重试失败");
+    } catch (e) {
+      mutator(data);
+      saveLocal();
+      renderAll();
+      setStatus("err", "✕ 同步失败，改动暂存本机：" + e.message);
+    } finally {
+      busy = false;
+      setBtnBusy(false);
+    }
+  }
+
+  async function refreshFromCloud(showBusy) {
+    if (busy) return;
+    if (showBusy) setStatus("busy", "☁ 加载云端数据…");
+    try {
+      const remote = await ghGet();
+      if (remote.json) {
+        data = normalize(remote.json);
+        saveLocal();
+        renderAll();
+      }
+      if (token) setStatus("ok", "☁ 已同步 " + timeStr());
+      else setStatus("local", "☁ 已加载云端数据 · 未设置令牌，只能查看（记分请到页面底部设置）");
+    } catch (e) {
+      setStatus("err", "✕ 无法连接云端，显示本机缓存：" + e.message);
+    }
+  }
+
+  // ---------- 状态显示 ----------
+  const statusEl = document.getElementById("syncStatus");
+  function setStatus(kind, text) {
+    statusEl.className = "sync-line " + kind;
+    statusEl.textContent = text;
+  }
+  function timeStr() {
+    const d = new Date();
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+  function setBtnBusy(on) {
+    document.getElementById("addBtn").disabled = on;
+  }
+  function isTyping() {
+    const el = document.activeElement;
+    return el && (el.tagName === "INPUT" || el.tagName === "SELECT");
+  }
+
+  // ---------- 令牌设置 ----------
+  const tokenInput = document.getElementById("tokenInput");
+  if (token) tokenInput.value = token;
+
+  document.getElementById("tokenSaveBtn").addEventListener("click", () => {
+    const v = tokenInput.value.trim();
+    if (!v) { setStatus("err", "✕ 令牌为空"); return; }
+    token = v;
+    localStorage.setItem(TOKEN_KEY, token);
+    setStatus("busy", "☁ 正在验证令牌…");
+    refreshFromCloud(false);
+  });
+
+  document.getElementById("tokenClearBtn").addEventListener("click", () => {
+    token = "";
+    tokenInput.value = "";
+    localStorage.removeItem(TOKEN_KEY);
+    setStatus("local", "已清除本机令牌，当前为只读模式");
+  });
 
   // ---------- 球员名字 ----------
   const nameInputs = document.querySelectorAll("#playersRow input");
   nameInputs.forEach(inp => {
-    inp.value = data.players[+inp.dataset.idx];
     inp.addEventListener("change", () => {
+      const idx = +inp.dataset.idx;
       const v = inp.value.trim();
-      if (!v) { inp.value = data.players[+inp.dataset.idx]; return; }
-      data.players[+inp.dataset.idx] = v;
-      save();
-      renderAll();
+      if (!v) { inp.value = data.players[idx]; return; }
+      withSync(d => { d.players[idx] = v; });
     });
   });
 
@@ -346,11 +588,13 @@
       return;
     }
 
-    data.matches.unshift({ a, b, sa, sb, t: Date.now() });
-    save();
+    const match = {
+      id: Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+      a, b, sa, sb, t: Date.now()
+    };
     scoreA.value = "";
     scoreB.value = "";
-    renderAll();
+    withSync(d => { d.matches.unshift(match); });
   });
 
   // ---------- 积分榜 ----------
@@ -401,7 +645,7 @@
       box.innerHTML = `<p class="empty">还没有比赛记录，快去单挑吧 💪</p>`;
       return;
     }
-    box.innerHTML = data.matches.map((m, i) => {
+    box.innerHTML = data.matches.map(m => {
       const d = new Date(m.t);
       const ds = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
       const aWin = m.sa > m.sb;
@@ -412,25 +656,23 @@
           <span class="num">${m.sa}</span> : <span class="num">${m.sb}</span>
           <span class="${aWin ? "" : "winner"}">${esc(data.players[m.b])}</span>
         </span>
-        <button class="del-btn" data-i="${i}" title="删除这场">✕</button>
+        <button class="del-btn" data-id="${m.id}" title="删除这场">✕</button>
       </div>`;
     }).join("");
 
     box.querySelectorAll(".del-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        data.matches.splice(+btn.dataset.i, 1);
-        save();
-        renderAll();
+        const id = btn.dataset.id;
+        if (!confirm("确定删除这场比赛记录吗？")) return;
+        withSync(d => { d.matches = d.matches.filter(m => m.id !== id); });
       });
     });
   }
 
   document.getElementById("clearBtn").addEventListener("click", () => {
     if (!data.matches.length) return;
-    if (confirm("确定要清空全部比赛记录吗？此操作无法恢复。")) {
-      data.matches = [];
-      save();
-      renderAll();
+    if (confirm("确定要清空全部比赛记录吗？此操作会同步到所有设备，无法恢复。")) {
+      withSync(d => { d.matches = []; });
     }
   });
 
@@ -441,12 +683,23 @@
   }
 
   function renderAll() {
+    if (!isTyping()) {
+      nameInputs.forEach(inp => { inp.value = data.players[+inp.dataset.idx]; });
+    }
     fillSelects();
     renderStandings();
     renderHistory();
   }
 
+  // ---------- 启动 ----------
   renderAll();
+  refreshFromCloud(true);
+
+  // 切回页面时刷新；有令牌时每 60 秒自动刷新
+  window.addEventListener("focus", () => { if (!isTyping()) refreshFromCloud(false); });
+  setInterval(() => {
+    if (token && !document.hidden && !isTyping()) refreshFromCloud(false);
+  }, 60000);
 })();
 </script>
 </body>
