@@ -212,6 +212,41 @@
   }
   .clear-btn:hover { color: var(--lose); border-color: var(--lose); }
 
+  /* 赛程安排 */
+  .sched-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .sched-form input[type="datetime-local"], .sched-form select {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  .sched-form input[type="datetime-local"] { flex: 1 1 180px; min-width: 170px; }
+  .sched-form select { flex: 1 1 90px; text-align: center; }
+  .sched-form .vs-small { color: var(--accent); font-weight: 800; font-size: 13px; }
+  .sched-form button {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 14px;
+    flex: 0 0 auto;
+  }
+  .vs-mini { color: var(--accent); font-weight: 800; font-size: 12px; margin: 0 6px; }
+  .sched-past { opacity: .55; }
+  .tag-past {
+    font-size: 11px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 6px;
+  }
+
   /* 云同步设置 */
   .token-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .token-row input {
@@ -313,6 +348,20 @@
     </div>
   </div>
 
+  <!-- 赛程安排 -->
+  <div class="card">
+    <h2>赛程安排</h2>
+    <div class="sched-form">
+      <input type="datetime-local" id="schedTime">
+      <select id="schedA"></select>
+      <span class="vs-small">VS</span>
+      <select id="schedB"></select>
+      <button id="schedAddBtn">添加赛程</button>
+    </div>
+    <p class="error" id="schedErr"></p>
+    <div id="schedList" style="margin-top: 12px;"></div>
+  </div>
+
   <!-- 历史记录 -->
   <div class="card">
     <h2>比赛记录</h2>
@@ -388,6 +437,11 @@
     d.matches = d.matches.filter(m => m && typeof m.sa === "number" && typeof m.sb === "number");
     for (const m of d.matches) {
       if (!m.id) m.id = (m.t || 0) + "_" + Math.random().toString(36).slice(2, 8);
+    }
+    if (!Array.isArray(d.schedule)) d.schedule = [];
+    d.schedule = d.schedule.filter(s => s && typeof s.t === "number");
+    for (const s of d.schedule) {
+      if (!s.id) s.id = (s.t || 0) + "_" + Math.random().toString(36).slice(2, 8);
     }
     return d;
   }
@@ -578,25 +632,31 @@
   // ---------- 选手下拉框 ----------
   const selA = document.getElementById("selA");
   const selB = document.getElementById("selB");
+  const schedA = document.getElementById("schedA");
+  const schedB = document.getElementById("schedB");
 
   function fillSelects() {
-    const pa = selA.value, pb = selB.value;
-    [selA, selB].forEach(sel => {
-      sel.innerHTML = data.players
-        .map((p, i) => `<option value="${i}">${esc(p)}</option>`)
-        .join("");
-    });
-    selA.value = pa !== "" && pa !== null ? pa : "0";
-    selB.value = pb !== "" && pb !== null ? pb : "1";
-    if (selA.value === selB.value) selB.value = (+selA.value + 1) % 3;
+    for (const [x, y] of [[selA, selB], [schedA, schedB]]) {
+      const px = x.value, py = y.value;
+      [x, y].forEach(sel => {
+        sel.innerHTML = data.players
+          .map((p, i) => `<option value="${i}">${esc(p)}</option>`)
+          .join("");
+      });
+      x.value = px !== "" && px !== null ? px : "0";
+      y.value = py !== "" && py !== null ? py : "1";
+      if (x.value === y.value) y.value = (+x.value + 1) % 3;
+    }
   }
 
-  selA.addEventListener("change", () => {
-    if (selA.value === selB.value) selB.value = (+selA.value + 1) % 3;
-  });
-  selB.addEventListener("change", () => {
-    if (selB.value === selA.value) selA.value = (+selB.value + 1) % 3;
-  });
+  for (const [x, y] of [[selA, selB], [schedA, schedB]]) {
+    x.addEventListener("change", () => {
+      if (x.value === y.value) y.value = (+x.value + 1) % 3;
+    });
+    y.addEventListener("change", () => {
+      if (y.value === x.value) x.value = (+y.value + 1) % 3;
+    });
+  }
 
   // ---------- 录入 ----------
   const scoreA = document.getElementById("scoreA");
@@ -630,6 +690,65 @@
     scoreB.value = "";
     withSync(d => { d.matches.unshift(match); });
   });
+
+  // ---------- 赛程安排 ----------
+  const schedTime = document.getElementById("schedTime");
+  const schedErr = document.getElementById("schedErr");
+
+  document.getElementById("schedAddBtn").addEventListener("click", () => {
+    schedErr.style.display = "none";
+    const a = +schedA.value, b = +schedB.value;
+    const t = schedTime.value ? new Date(schedTime.value).getTime() : NaN;
+
+    let err = "";
+    if (isNaN(t)) err = "请先选择比赛时间";
+    else if (a === b) err = "两名球员不能相同";
+
+    if (err) {
+      schedErr.textContent = err;
+      schedErr.style.display = "block";
+      return;
+    }
+
+    const item = {
+      id: Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+      a, b, t
+    };
+    schedTime.value = "";
+    withSync(d => { d.schedule.push(item); });
+  });
+
+  function renderSchedule() {
+    const box = document.getElementById("schedList");
+    const list = [...data.schedule].sort((x, y) => x.t - y.t);
+    if (!list.length) {
+      box.innerHTML = `<p class="empty">暂无赛程，约一场吧 📅</p>`;
+      return;
+    }
+    const now = Date.now();
+    const wd = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+    box.innerHTML = list.map(s => {
+      const d = new Date(s.t);
+      const past = s.t < now;
+      const ds = `${d.getMonth() + 1}/${d.getDate()} ${wd[d.getDay()]} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      return `<div class="history-item ${past ? "sched-past" : ""}">
+        <span class="h-date">${ds}</span>
+        <span class="h-score">
+          ${esc(data.players[s.a] ?? "?")}<span class="vs-mini">VS</span>${esc(data.players[s.b] ?? "?")}
+          ${past ? '<span class="tag-past">已结束</span>' : ""}
+        </span>
+        <button class="del-btn" data-id="${s.id}" title="删除这条赛程">✕</button>
+      </div>`;
+    }).join("");
+
+    box.querySelectorAll(".del-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.id;
+        if (!confirm("确定删除这条赛程吗？")) return;
+        withSync(d => { d.schedule = d.schedule.filter(s => s.id !== id); });
+      });
+    });
+  }
 
   // ---------- 积分榜 ----------
   function calcStats() {
@@ -722,6 +841,7 @@
     }
     fillSelects();
     renderStandings();
+    renderSchedule();
     renderHistory();
   }
 
