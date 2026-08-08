@@ -238,6 +238,10 @@
     background: none;
     color: var(--muted);
   }
+  .token-msg { font-size: 13px; margin-top: 10px; display: none; font-weight: 600; }
+  .token-msg.ok { display: block; color: var(--win); }
+  .token-msg.err { display: block; color: var(--lose); }
+  .token-msg.busy { display: block; color: var(--accent); }
   .howto { margin-top: 14px; font-size: 13px; color: var(--muted); }
   .howto summary { cursor: pointer; color: var(--accent); font-weight: 600; }
   .howto ol { margin: 10px 0 0 20px; line-height: 1.9; }
@@ -329,6 +333,7 @@
       <button id="tokenSaveBtn">保存</button>
       <button id="tokenClearBtn" class="secondary">清除</button>
     </div>
+    <p class="token-msg" id="tokenMsg"></p>
     <details class="howto">
       <summary>管理员如何生成令牌？（只需操作一次）</summary>
       <ol>
@@ -514,19 +519,48 @@
   const tokenInput = document.getElementById("tokenInput");
   if (token) tokenInput.value = token;
 
-  document.getElementById("tokenSaveBtn").addEventListener("click", () => {
+  const tokenMsg = document.getElementById("tokenMsg");
+  function setTokenMsg(kind, text) {
+    tokenMsg.className = "token-msg " + kind;
+    tokenMsg.textContent = text;
+  }
+
+  document.getElementById("tokenSaveBtn").addEventListener("click", async () => {
     const v = tokenInput.value.trim();
-    if (!v) { setStatus("err", "✕ 令牌为空"); return; }
-    token = v;
-    localStorage.setItem(TOKEN_KEY, token);
-    setStatus("busy", "☁ 正在验证令牌…");
-    refreshFromCloud(false);
+    if (!v) { setTokenMsg("err", "❌ 请先粘贴令牌再点保存"); return; }
+    setTokenMsg("busy", "⏳ 正在验证令牌…");
+    try {
+      const res = await fetch("https://api.github.com/repos/" + GH_OWNER + "/" + GH_REPO, {
+        headers: { Accept: "application/vnd.github+json", Authorization: "Bearer " + v },
+        cache: "no-store"
+      });
+      if (res.status === 401) {
+        setTokenMsg("err", "❌ 令牌无效（可能粘贴不完整或已过期），未保存");
+        return;
+      }
+      if (!res.ok) {
+        setTokenMsg("err", "❌ 验证失败 (HTTP " + res.status + ")，未保存");
+        return;
+      }
+      const info = await res.json();
+      token = v;
+      localStorage.setItem(TOKEN_KEY, token);
+      if (info.permissions && info.permissions.push) {
+        setTokenMsg("ok", "✅ 保存成功，令牌有效，可以记分了");
+      } else {
+        setTokenMsg("busy", "⚠ 已保存，但令牌似乎没有写入权限，记分可能失败，请检查令牌设置");
+      }
+      refreshFromCloud(false);
+    } catch (e) {
+      setTokenMsg("err", "❌ 网络错误，无法验证：" + e.message);
+    }
   });
 
   document.getElementById("tokenClearBtn").addEventListener("click", () => {
     token = "";
     tokenInput.value = "";
     localStorage.removeItem(TOKEN_KEY);
+    setTokenMsg("ok", "已清除本机令牌，当前为只读模式");
     setStatus("local", "已清除本机令牌，当前为只读模式");
   });
 
